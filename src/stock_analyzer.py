@@ -93,9 +93,6 @@ async def analyze_stock(symbol: str) -> str:
     price_change = stock_data.get("Change", "未知")
     trade_vol = stock_data.get("TradeVolume", "未知")
     
-    # Generate Chart
-    chart_filename = generate_stock_chart(symbol, stock_name)
-
     prompt = f"""
     請針對以下台股今日盤後數據給出短評：
     - 代號：{symbol}
