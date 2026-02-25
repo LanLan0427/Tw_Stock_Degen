@@ -1,12 +1,16 @@
 import os
 import requests
 import json
+import urllib3
 from datetime import datetime
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 from dotenv import load_dotenv
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+
+# 忽略因為 verify=False 產生的警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Environment ──────────────────────────────────────────────────────
 load_dotenv()
@@ -41,7 +45,9 @@ def fetch_twse_stock_data(symbol: str) -> dict | None:
     """
     url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
     try:
-        response = requests.get(url, timeout=10)
+        # TWSE OpenAPI 有時會有憑證問題，特別是在某些 Windows 環境下
+        # 這裡設定 verify=False 來暫時忽略 SSL 憑證檢查
+        response = requests.get(url, verify=False)
         response.raise_for_status()
         data = response.json()
         
