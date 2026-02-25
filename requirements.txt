@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+line-bot-sdk
+google-genai
+requests
+python-dotenv
+tenacity
