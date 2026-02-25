@@ -1,7 +1,9 @@
 import os
 import logging
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from linebot.v3 import WebhookParser
 from linebot.v3.messaging import (
@@ -29,8 +31,12 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
     logger.warning("Line Messaging API keys are missing. Please set them in .env")
 
-# ── Line Bot Setup ───────────────────────────────────────────────────
+# ── Line Bot & Web Setup ─────────────────────────────────────────────
 app = FastAPI(title="Tw_Stock_Degen API")
+
+# Setup static directory for serving web UI
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN:
     configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -128,4 +134,30 @@ def extract_symbol(text: str) -> str | None:
 
 @app.get("/")
 async def root():
-    return {"message": "Tw_Stock_Degen is running. Webhook endpoint is at /callback"}
+    # 當直接造訪公開網址時，回傳我們超炫的靜態網頁
+    return FileResponse("static/index.html")
+
+# 定義前端傳來的 JSON 結構
+class AnalyzeRequest(BaseModel):
+    symbol: str
+
+@app.post("/api/analyze")
+async def api_analyze(request: AnalyzeRequest):
+    """供網頁前端 (Web UI) 呼叫的 API 端點"""
+    symbol = extract_symbol(request.symbol)
+    
+    if not symbol:
+         return JSONResponse(
+             status_code=400,
+             content={"result": "老師聽不懂啦！請輸入台股代號，例如：`2330` 或是 `台積電`。"}
+         )
+         
+    try:
+        reply_text = await analyze_stock(symbol)
+        return JSONResponse(content={"result": reply_text})
+    except Exception as e:
+        logger.error(f"Error handling API request: {e}", exc_info=True)
+        return JSONResponse(
+             status_code=500,
+             content={"result": "⚠️ 老師的系統當機了...（可能查無此檔股票或網路異常）"}
+         )
