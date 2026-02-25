@@ -1,8 +1,15 @@
-# Environment files
+# Environments
 .env
-.venv/
+.venv
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
@@ -10,9 +17,12 @@ __pycache__/
 *$py.class
 *.so
 
-# IDEs
-.vscode/
-.idea/
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# Custom static files
+# VS Code
+.vscode/
+
+# Static and temporary files
 static/
+*.log
