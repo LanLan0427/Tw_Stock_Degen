@@ -56,9 +56,27 @@ def fetch_twse_stock_data(symbol: str) -> dict | None:
             if stock.get("Code") == symbol:
                 return stock
                 
-        return None # 找不到該股票
+        # --- 2. 如果上市沒找到，改找上櫃 (TPEx) ---
+        tpex_url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+        response_tpex = requests.get(tpex_url, verify=False)
+        response_tpex.raise_for_status()
+        tpex_data = response_tpex.json()
+        
+        for stock in tpex_data:
+            if stock.get("SecuritiesCompanyCode") == symbol:
+                # 為了跟 TWSE 格式保持一致，我們把他 mapping 一下
+                return {
+                    "Code": stock.get("SecuritiesCompanyCode"),
+                    "Name": stock.get("CompanyName"),
+                    "ClosingPrice": stock.get("Close"),
+                    "Change": stock.get("Change"),
+                    "TradeVolume": stock.get("TradingShares"),
+                }
+                
+        # 兩邊都找不到
+        return None
     except Exception as e:
-        print(f"Error fetching TWSE data: {e}")
+        print(f"Error fetching TWSE/TPEx data: {e}")
         return None
 
 # ── AI Analysis ──────────────────────────────────────────────────────
