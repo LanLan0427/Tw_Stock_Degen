@@ -53,7 +53,7 @@ def fetch_twse_stock_data(symbol: str) -> dict | None:
         
         # 尋找指定股票代號的數據
         for stock in data:
-            if stock.get("Code") == symbol:
+            if stock.get("Code") == symbol or stock.get("Name") == symbol:
                 return stock
                 
         # --- 2. 如果上市沒找到，改找上櫃 (TPEx) ---
@@ -63,7 +63,7 @@ def fetch_twse_stock_data(symbol: str) -> dict | None:
         tpex_data = response_tpex.json()
         
         for stock in tpex_data:
-            if stock.get("SecuritiesCompanyCode") == symbol:
+            if stock.get("SecuritiesCompanyCode") == symbol or stock.get("CompanyName") == symbol:
                 # 為了跟 TWSE 格式保持一致，我們把他 mapping 一下
                 return {
                     "Code": stock.get("SecuritiesCompanyCode"),

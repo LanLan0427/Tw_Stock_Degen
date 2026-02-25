@@ -116,14 +116,14 @@ async def handle_message(user_message: str, reply_token: str):
          logger.error(f"Failed to send reply to Line: {e}")
 
 def extract_symbol(text: str) -> str | None:
-    # 簡單過濾：移除 "分析" 兩字，剩下的如果是數字（2~5碼），就當作代號。
-    # 實際上台股代號可能是數字加英文字母(如 0050, 2330, 2881A)
-    # 這邊提供一個最基礎的初步實作
-    import re
+    # 簡單過濾：移除 "分析" 兩字及空白符號
+    # 不再限制只能是英數字，以便支援如「台積電」、「長榮」等中文名稱
     cleaned = text.replace("分析", "").replace(" ", "").strip()
-    # 假設台股代號長度至少4碼 (大部分是4碼，ETF和有些特種股可能到6碼)
-    if re.match(r"^[0-9A-Za-z]{4,6}$", cleaned):
+    
+    # 假設股票代號或名稱長度介於 2 ~ 10 個字之間
+    if 2 <= len(cleaned) <= 10:
         return cleaned
+        
     return None
 
 @app.get("/")
