@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tw_Stock_Degen | 台股投顧大師</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts (Outfit) -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0f172a; /* Tailwind slate-900 */
+            color: #f8fafc; /* Tailwind slate-50 */
+            /* 簡單的動態漸層背景特效 */
+            background-image: radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.1), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.1), transparent 25%);
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7); /* slate-800 帶透明度 */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #10b981, #3b82f6); /* Emerald to Blue */
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        /* 讓 AI 輸出的文字可以保留換行 */
+        #result-content {
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        
+        .loading-pulse {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6)); }
+            50% { opacity: .5; filter: drop-shadow(0 0 2px rgba(16, 185, 129, 0.2)); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- 主容器 -->
+    <main class="w-full max-w-2xl glass-panel rounded-2xl p-8 transition-all duration-300">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight">
+                Tw_Stock_<span class="gradient-text">Degen</span> 📈
+            </h1>
+            <p class="text-slate-400 text-sm md:text-base">由 AI 驅動的頂級台股嘴砲分析大師，為您開示行情。</p>
+        </header>
+
+        <!-- 輸入區 -->
+        <form id="analyze-form" class="relative group mb-8">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-slate-400 group-focus-within:text-emerald-400 transition-colors" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+            </div>
+            <input 
+                type="text" 
+                id="stock-symbol" 
+                required
+                autocomplete="off"
+                placeholder="請輸入台股代號或名稱 (e.g., 2330, 台積電)" 
+                class="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl py-4 pl-12 pr-32 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder-slate-500 text-lg"
+            >
+            <button 
+                type="submit" 
+                id="submit-btn"
+                class="absolute inset-y-2 right-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-semibold py-2 px-6 rounded-lg transition-all transform active:scale-95 flex items-center shadow-lg shadow-emerald-500/30"
+            >
+                <span>大師開示</span>
+            </button>
+        </form>
+
+        <!-- 結果顯示區 (預設隱藏) -->
+        <div id="result-container" class="hidden">
+            <div class="border-t border-slate-700/50 pt-6">
+                <!-- 標籤列 -->
+                <div class="flex items-center space-x-2 mb-4">
+                    <span class="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/30">AI 分析結果</span>
+                    <span id="stock-badge" class="bg-blue-500/20 text-blue-400 text-xs font-bold px-3 py-1 rounded-full border border-blue-500/30 hidden"></span>
+                </div>
+                
+                <!-- 內容 -->
+                <div class="bg-slate-900/80 rounded-xl p-6 border border-slate-700/80 shadow-inner">
+                    <div id="loading-indicator" class="hidden flex flex-col items-center justify-center py-6">
+                        <div class="w-12 h-12 border-4 border-slate-600 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+                        <p class="text-emerald-400 text-sm loading-pulse font-medium">大師正在喝水潤喉，看盤中...</p>
+                    </div>
+                    
+                    <div id="result-content" class="text-slate-300 text-lg md:text-xl font-light tracking-wide">
+                        <!-- API 結果將會插入於此 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-slate-500 text-xs text-center">
+        <p>Disclaimer: 投資一定有風險，基金投資有賺有賠。本網站資訊為 AI 生成之娛樂性質，不構成任何真實投資建議。</p>
+        <p class="mt-1">Powered by FastAPI & Gemini 2.0</p>
+    </footer>
+
+    <!-- JavaScript 邏輯 -->
+    <script>
+        document.getElementById('analyze-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const symbolInput = document.getElementById('stock-symbol').value.trim();
+            const resultContainer = document.getElementById('result-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const resultContent = document.getElementById('result-content');
+            const submitBtn = document.getElementById('submit-btn');
+            const stockBadge = document.getElementById('stock-badge');
+            
+            if (!symbolInput) return;
+
+            // UI 狀態：載入中
+            resultContainer.classList.remove('hidden');
+            resultContent.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            stockBadge.classList.add('hidden');
+
+            try {
+                // 呼叫我們的 FastAPI 端點
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ symbol: symbolInput })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // UI 狀態：顯示結果
+                resultContent.textContent = data.result;
+                stockBadge.textContent = symbolInput;
+                stockBadge.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error("Error fetching analysis:", error);
+                resultContent.textContent = "⚠️ 老師的系統當機了... 無法連線到後端伺服器，請稍後再試。";
+            } finally {
+                // UI 狀態：恢復按鈕
+                loadingIndicator.classList.add('hidden');
+                resultContent.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    </script>
+</body>
+</html>
