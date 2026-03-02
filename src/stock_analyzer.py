@@ -37,46 +37,91 @@ SYSTEM_INSTRUCTION = """
 """
 
 # ── Data Fetching & Charting ─────────────────────────────────────────
-def fetch_twse_stock_data(symbol: str) -> dict | None:
-    """
-    從台灣證券交易所 OpenAPI 獲取個股日收盤行情 (STOCK_DAY_ALL)。
-    這支 API 包含所有股票當日的收盤資訊。
-    API 網址: https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
-    """
-    url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+# 建立一個簡單的記憶體快取，避免每次都去證交所抓整包清單
+stock_list_cache = []
+
+def get_stock_list():
+    global stock_list_cache
+    if stock_list_cache:
+        return stock_list_cache
+        
     try:
-        # TWSE OpenAPI 有時會有憑證問題，特別是在某些 Windows 環境下
-        # 這裡設定 verify=False 來暫時忽略 SSL 憑證檢查
-        response = requests.get(url, verify=False)
-        response.raise_for_status()
-        data = response.json()
-        
-        # 尋找指定股票代號的數據
-        for stock in data:
-            if stock.get("Code") == symbol or stock.get("Name") == symbol:
-                return stock
-                
-        # --- 2. 如果上市沒找到，改找上櫃 (TPEx) ---
+        # 下載上市名單
+        twse_url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+        twse_res = requests.get(twse_url, verify=False, timeout=5)
+        twse_res.raise_for_status()
+        for item in twse_res.json():
+            stock_list_cache.append({
+                "Code": item.get("Code"),
+                "Name": item.get("Name"),
+                "Type": "TWSE"
+            })
+            
+        # 下載上櫃名單
         tpex_url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
-        response_tpex = requests.get(tpex_url, verify=False)
-        response_tpex.raise_for_status()
-        tpex_data = response_tpex.json()
-        
-        for stock in tpex_data:
-            if stock.get("SecuritiesCompanyCode") == symbol or stock.get("CompanyName") == symbol:
-                # 為了跟 TWSE 格式保持一致，我們把他 mapping 一下
-                return {
-                    "Code": stock.get("SecuritiesCompanyCode"),
-                    "Name": stock.get("CompanyName"),
-                    "ClosingPrice": stock.get("Close"),
-                    "Change": stock.get("Change"),
-                    "TradeVolume": stock.get("TradingShares"),
-                }
-                
-        # 兩邊都找不到
-        return None
+        tpex_res = requests.get(tpex_url, verify=False, timeout=5)
+        tpex_res.raise_for_status()
+        for item in tpex_res.json():
+             stock_list_cache.append({
+                "Code": item.get("SecuritiesCompanyCode"),
+                "Name": item.get("CompanyName"),
+                "Type": "TPEx"
+            })
+            
     except Exception as e:
-        print(f"Error fetching TWSE/TPEx data: {e}")
+        print(f"Error fetching stock list: {e}")
+        
+    return stock_list_cache
+
+def fetch_stock_data(query: str) -> dict | None:
+    """
+    透過 Yahoo Finance 獲取最即時的台股盤中報價。
+    query 可以是股票代號 (如 2330) 或名稱 (如 台積電)。
+    """
+    stocks = get_stock_list()
+    target_stock = None
+    
+    # 1. 將名稱轉換為代號與市場類別
+    for stock in stocks:
+        if stock["Code"] == query or stock["Name"] == query:
+            target_stock = stock
+            break
+            
+    if not target_stock:
+        # 如果從官方清單找不到，直接把 query 當成代號，預設上市
+        target_stock = {"Code": query, "Name": query, "Type": "TWSE"}
+        
+    symbol = target_stock["Code"]
+    suffix = ".TWO" if target_stock["Type"] == "TPEx" else ".TW"
+    yf_symbol = f"{symbol}{suffix}"
+    
+    # 2. 向 Yahoo Finance 請求即時資料
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}?interval=1d&range=1d"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        res = requests.get(url, headers=headers, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        meta = data["chart"]["result"][0]["meta"]
+        
+        current_price = meta.get("regularMarketPrice", 0)
+        prev_close = meta.get("chartPreviousClose", 0)
+        volume = meta.get("regularMarketVolume", 0)
+        
+        # Yahoo Finance 不直接提供字串漲跌，我們自己算
+        change_val = current_price - prev_close
+        sign = "+" if change_val > 0 else ""
+        
+        return {
+            "Code": symbol,
+            "Name": target_stock["Name"],
+            "ClosingPrice": f"{current_price:.2f}",
+            "Change": f"{sign}{change_val:.2f}",
+            "TradeVolume": str(volume)
+        }
+    except Exception as e:
+        print(f"Error fetching from Yahoo Finance: {e}")
         return None
 
 # ── AI Analysis ──────────────────────────────────────────────────────
@@ -86,8 +131,8 @@ async def analyze_stock(symbol: str) -> str:
     if not client:
         return "老師的腦袋當機了（尚未設定 Gemini API Key）"
 
-    # 1. 取得 TWSE 數據
-    stock_data = fetch_twse_stock_data(symbol)
+    # 1. 取得最新即時數據
+    stock_data = fetch_stock_data(symbol)
     if not stock_data:
          return f"同學，你在找哪一檔？台股沒有 `{symbol}` 這支股票啦！是不是打錯了？"
 
@@ -143,11 +188,11 @@ async def analyze_stock(symbol: str) -> str:
     # 先用語氣比較正經/美觀的格式列出基本資訊
     header = (
         f"📊 【{symbol} {stock_name}】今日實況\n"
-        f"──────────────────\n"
+        f"───────────────\n"
         f"🔹 收盤價：{close_price}\n"
         f"🔹 漲跌幅：{price_change}\n"
         f"🔹 成交量：{trade_vol} 股\n"
-        f"──────────────────\n\n"
+        f"───────────────\n\n"
         f"🎤 老師開示：\n"
     )
 
