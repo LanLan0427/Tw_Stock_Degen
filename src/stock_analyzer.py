@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import random
 import urllib3
 from datetime import datetime
 from google import genai
@@ -15,6 +16,15 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ── Environment ──────────────────────────────────────────────────────
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# 隨機瀏覽器 User-Agent 列表，避免被 Yahoo 偵測為機器人而阻擋
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+]
 
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -97,11 +107,19 @@ def fetch_stock_data(query: str) -> dict | None:
     
     # 2. 向 Yahoo Finance 請求即時資料
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}?interval=1d&range=1d"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    @retry(
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(5)
+    )
+    def fetch_with_retry():
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status() # 遇到 429 時會拋出 HTTPError，觸發 tenacity 重試
+        return r
     
     try:
-        res = requests.get(url, headers=headers, timeout=5)
-        res.raise_for_status()
+        res = fetch_with_retry()
         data = res.json()
         meta = data["chart"]["result"][0]["meta"]
         
